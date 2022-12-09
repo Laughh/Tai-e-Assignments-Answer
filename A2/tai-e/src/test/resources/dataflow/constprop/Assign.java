@@ -6,5 +6,13 @@ class Assign {
         x = 3;
         x = 4;
         y = x;
+        float c = 1;
+        B b = new B();
+        b.a = x;
     }
+
+}
+
+class B{
+    public int a;
 }

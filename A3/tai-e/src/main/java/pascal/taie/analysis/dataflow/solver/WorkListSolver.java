@@ -26,6 +26,11 @@ import pascal.taie.analysis.dataflow.analysis.DataflowAnalysis;
 import pascal.taie.analysis.dataflow.fact.DataflowResult;
 import pascal.taie.analysis.graph.cfg.CFG;
 
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.Queue;
+import java.util.Set;
+
 class WorkListSolver<Node, Fact> extends Solver<Node, Fact> {
 
     WorkListSolver(DataflowAnalysis<Node, Fact> analysis) {
@@ -34,11 +39,71 @@ class WorkListSolver<Node, Fact> extends Solver<Node, Fact> {
 
     @Override
     protected void doSolveForward(CFG<Node> cfg, DataflowResult<Node, Fact> result) {
-        // TODO - finish me
+        //TODO - finish me
+
+        Queue<Node> q = new LinkedList<>();
+        Set<Node> vis = new HashSet<>();
+
+        for(Node node : cfg){
+            if(!cfg.isEntry(node)){
+                q.add(node);
+                vis.add(node);
+            }
+        }
+
+        while(!q.isEmpty()){
+            Node cur = q.poll();
+            vis.remove(cur);
+
+            Fact in = result.getInFact(cur);
+            Fact out = result.getOutFact(cur);
+            for(Node pred : cfg.getPredsOf(cur)){
+                analysis.meetInto(result.getOutFact(pred), in);
+            }
+            boolean res = analysis.transferNode(cur, in, out);
+            if(res){
+                for(Node succ : cfg.getSuccsOf(cur)){
+                    if(!vis.contains(succ)){
+                        q.add(succ);
+                        vis.add(succ);
+                    }
+                }
+            }
+        }
     }
 
     @Override
     protected void doSolveBackward(CFG<Node> cfg, DataflowResult<Node, Fact> result) {
-        // TODO - finish me
+        //TODO - finish me
+
+        Queue<Node> q = new LinkedList<>();
+        Set<Node> vis = new HashSet<>();
+
+        for(Node node : cfg){
+            if(!cfg.isExit(node)){
+                q.add(node);
+                vis.add(node);
+            }
+        }
+
+        while(!q.isEmpty()){
+            Node cur = q.poll();
+            vis.remove(cur);
+
+            Fact in = result.getInFact(cur);
+            Fact out = result.getOutFact(cur);
+            for(Node succ : cfg.getSuccsOf(cur)){
+                analysis.meetInto(out, result.getInFact(succ));
+            }
+            boolean res = analysis.transferNode(cur, in, out);
+            if(res){
+                for(Node succ : cfg.getPredsOf(cur)){
+                    if(!vis.contains(succ)){
+                        q.add(succ);
+                        vis.add(succ);
+                    }
+                }
+            }
+        }
     }
 }

@@ -24,11 +24,15 @@ package pascal.taie.analysis.dataflow.inter;
 
 import pascal.taie.analysis.dataflow.fact.DataflowResult;
 import pascal.taie.analysis.graph.icfg.ICFG;
-import pascal.taie.util.collection.SetQueue;
+import pascal.taie.analysis.graph.icfg.ICFGEdge;
+import pascal.taie.language.classes.JMethod;
 
+import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
+
 
 /**
  * Solver for inter-procedural data-flow analysis.
@@ -60,9 +64,55 @@ class InterSolver<Method, Node, Fact> {
 
     private void initialize() {
         // TODO - finish me
+        workList = new LinkedList<>();
+
+        Set<Node> roots = new HashSet<>();
+
+        for(Method method : icfg.entryMethods().toList()){
+            Node entry = icfg.getEntryOf(method);
+            if(icfg.getInDegreeOf(entry) == 0){
+                roots.add(entry);
+            }
+        }
+
+        for(Node node : icfg){
+            if(roots.contains(node)){
+                result.setInFact(node, analysis.newBoundaryFact(node));
+            }else{
+                result.setInFact(node, analysis.newInitialFact());
+            }
+            result.setOutFact(node, analysis.newInitialFact());
+        }
     }
 
     private void doSolve() {
         // TODO - finish me
+
+        workList.addAll(icfg.getNodes());
+        Set<Node> has = new HashSet<>(icfg.getNodes());
+
+        while(!workList.isEmpty()){
+            Node cur = workList.poll();
+            has.remove(cur);
+
+            Fact in = result.getInFact(cur);
+            Fact out = result.getOutFact(cur);
+
+            for(ICFGEdge<Node> edge : icfg.getInEdgesOf(cur)){
+                analysis.meetInto(analysis.transferEdge(edge, result.getOutFact(edge.getSource())), in);
+            }
+            boolean change = analysis.transferNode(cur, in, out);
+//            System.out.println(cur + ": " + in + " -> " + out);
+            if(change){
+                for(Node succ : icfg.getSuccsOf(cur)){
+                    if(!has.contains(succ)){
+                        has.add(succ);
+                        workList.add(succ);
+                    }
+                }
+            }
+        }
+
     }
 }
+

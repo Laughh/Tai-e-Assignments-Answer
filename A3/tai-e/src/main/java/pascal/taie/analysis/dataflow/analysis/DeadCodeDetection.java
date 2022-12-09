@@ -1,3 +1,4 @@
+
 /*
  * Tai-e: A Static Analysis Framework for Java
  *
@@ -33,21 +34,13 @@ import pascal.taie.analysis.graph.cfg.CFGBuilder;
 import pascal.taie.analysis.graph.cfg.Edge;
 import pascal.taie.config.AnalysisConfig;
 import pascal.taie.ir.IR;
-import pascal.taie.ir.exp.ArithmeticExp;
-import pascal.taie.ir.exp.ArrayAccess;
-import pascal.taie.ir.exp.CastExp;
-import pascal.taie.ir.exp.FieldAccess;
-import pascal.taie.ir.exp.NewExp;
-import pascal.taie.ir.exp.RValue;
-import pascal.taie.ir.exp.Var;
+import pascal.taie.ir.exp.*;
 import pascal.taie.ir.stmt.AssignStmt;
 import pascal.taie.ir.stmt.If;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.ir.stmt.SwitchStmt;
 
-import java.util.Comparator;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
 
 public class DeadCodeDetection extends MethodAnalysis {
 
@@ -62,18 +55,86 @@ public class DeadCodeDetection extends MethodAnalysis {
         // obtain CFG
         CFG<Stmt> cfg = ir.getResult(CFGBuilder.ID);
         // obtain result of constant propagation
-        DataflowResult<Stmt, CPFact> constants =
-                ir.getResult(ConstantPropagation.ID);
+        DataflowResult<Stmt, CPFact> constants = ir.getResult(ConstantPropagation.ID);
         // obtain result of live variable analysis
-        DataflowResult<Stmt, SetFact<Var>> liveVars =
-                ir.getResult(LiveVariableAnalysis.ID);
+        DataflowResult<Stmt, SetFact<Var>> liveVars = ir.getResult(LiveVariableAnalysis.ID);
+
         // keep statements (dead code) sorted in the resulting set
         Set<Stmt> deadCode = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
+
         // TODO - finish me
-        // Your task is to recognize dead code in ir and add it to deadCode
+
+        Set<Stmt> vis = new HashSet<>();
+        Queue<Stmt> q = new LinkedList<>();
+
+        q.add(cfg.getEntry());
+        vis.add(cfg.getEntry());
+
+        while(!q.isEmpty()){
+            Stmt cur = q.poll();
+
+            if(cur instanceof If ifStmt){
+                CPFact in = constants.getInFact(cur);
+                Value res = ConstantPropagation.evaluate(ifStmt.getCondition(), in);
+                if(res.isConstant()){
+                    Edge.Kind need = res.getConstant() == 0 ? Edge.Kind.IF_FALSE : Edge.Kind.IF_TRUE;
+
+                    for(Edge<Stmt> edge : cfg.getOutEdgesOf(cur)){
+                        if(edge.getKind() == need){
+                            insert(vis, q, edge.getTarget());
+                            break;
+                        }
+                    }
+                    continue;
+                }
+            }else if(cur instanceof SwitchStmt switchStmt){
+                CPFact in = constants.getInFact(cur);
+                Value res = ConstantPropagation.evaluate(switchStmt.getVar(), in);
+
+                if(res.isConstant()){
+                    boolean gone = false;
+                    for(Edge<Stmt> edge : cfg.getOutEdgesOf(cur)){
+                        if(edge.getKind() == Edge.Kind.SWITCH_CASE && res.getConstant() == edge.getCaseValue()){
+                            gone = true;
+                            insert(vis, q, edge.getTarget());
+                            break;
+                        }
+                    }
+                    if(!gone){
+                        insert(vis, q, switchStmt.getDefaultTarget());
+                    }
+                    continue;
+                }
+            }else if(cur instanceof AssignStmt<?,?> assign){
+                if(assign.getLValue() instanceof Var L) {
+                    if (hasNoSideEffect(assign.getRValue()) && !liveVars.getOutFact(cur).contains(L)) {
+                        deadCode.add(cur);
+                    }
+                }
+            }
+
+            for(Stmt succ : cfg.getSuccsOf(cur)){
+                insert(vis, q, succ);
+            }
+        }
+
+        for(Stmt node : cfg){
+            if(!vis.contains(node)){
+                deadCode.add(node);
+            }
+        }
+
+        deadCode.remove(cfg.getExit());
+
         return deadCode;
     }
 
+    private void insert(Set<Stmt> vis, Queue<Stmt> q, Stmt node){
+        if(!vis.contains(node)){
+            q.add(node);
+            vis.add(node);
+        }
+    }
     /**
      * @return true if given RValue has no side effect, otherwise false.
      */
@@ -97,3 +158,5 @@ public class DeadCodeDetection extends MethodAnalysis {
         return true;
     }
 }
+
+
