@@ -2,6 +2,7 @@
   <a href="https://tai-e.pascal-lab.net/">
     <img src="https://tai-e.pascal-lab.net/o-tai-e.webp" height="200">
   </a>
+</div>
 
 ## Tai-e Assignments Answer
 #### [使用须知] 
